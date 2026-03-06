@@ -1,0 +1,14 @@
+import boto3
+from log2incident.models import TaggedLog
+from config.config import get_aws_region, get_s3_bucket
+import json
+
+class S3Uploader:
+    def __init__(self):
+        self.s3 = boto3.client('s3', region_name=get_aws_region())
+        self.bucket = get_s3_bucket()
+
+    def upload_log(self, log: TaggedLog):
+        key = f"logs/{log.id}.json"
+        data = log.model_dump_json()
+        self.s3.put_object(Bucket=self.bucket, Key=key, Body=data)
