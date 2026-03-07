@@ -1,10 +1,12 @@
 import json
+import importlib
 from datetime import datetime
 import boto3
 from moto import mock_aws
 import pytest
 import sys
 import os
+from fastapi.testclient import TestClient
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -172,3 +174,61 @@ def test_accumulated_incident_creation(monkeypatch):
     # Should have 1 accumulated incident (created on 3rd event)
     assert len(incident_manager.incidents) == 1
     assert incident_manager.incidents[0].status == 'open'
+
+
+@mock_aws
+def test_api_gateway_log_receiver_end_to_end(monkeypatch):
+    """Test API Gateway + LogReceiver path through to incident creation."""
+
+    # Setup SQS and S3 infrastructure.
+    sqs = boto3.client('sqs', region_name=get_aws_region())
+    queue = sqs.create_queue(QueueName='test-queue-api-e2e')
+    queue_url = queue['QueueUrl']
+    monkeypatch.setenv('SQS_QUEUE_URL', queue_url)
+
+    s3 = boto3.client('s3', region_name=get_aws_region())
+    bucket = 'test-bucket-api-e2e'
+    s3.create_bucket(Bucket=bucket)
+    monkeypatch.setenv('S3_BUCKET', bucket)
+
+    # Import after env setup because the module creates LogReceiver at import time.
+    api_module = importlib.import_module('log2incident.api_gateway.app')
+    api_module = importlib.reload(api_module)
+    client = TestClient(api_module.app)
+
+    payload = {
+        'id': 'api-log-001',
+        'source': 'api-client',
+        'message': 'ERROR: Service unavailable',
+        'metadata': {'request_id': 'req-1'}
+    }
+    response = client.post('/logs', json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['success'] is True
+    assert body['message_id']
+    assert body['log_id'] == 'api-log-001'
+
+    # Continue with the regular pipeline and verify incident creation.
+    consumer = SQSConsumer()
+    raw_logs = consumer.consume_logs()
+    assert len(raw_logs) == 1
+    assert raw_logs[0].id == 'api-log-001'
+
+    tagger = Tagger()
+    tagged_log = tagger.tag_log(raw_logs[0])
+    assert 'error' in tagged_log.tags
+
+    uploader = S3Uploader()
+    uploader.upload_log(tagged_log)
+    objs = s3.list_objects_v2(Bucket=bucket)
+    assert objs['KeyCount'] == 1
+
+    event_creator = EventCreator()
+    event = event_creator.create_event(tagged_log)
+    assert event.severity == 'high'
+
+    incident_manager = IncidentManager()
+    incident_manager.process_event(event)
+    assert len(incident_manager.incidents) == 1
