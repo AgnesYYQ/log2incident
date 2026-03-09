@@ -52,6 +52,31 @@ def test_tagger_tag_log():
 
 
 @mock_aws
+def test_tagger_loads_rules_from_dynamodb(monkeypatch):
+    dynamodb = boto3.client('dynamodb', region_name=get_aws_region())
+    table_name = 'tag-rules'
+    dynamodb.create_table(
+        TableName=table_name,
+        KeySchema=[{'AttributeName': 'tag', 'KeyType': 'HASH'}],
+        AttributeDefinitions=[{'AttributeName': 'tag', 'AttributeType': 'S'}],
+        BillingMode='PAY_PER_REQUEST',
+    )
+    dynamodb.put_item(
+        TableName=table_name,
+        Item={
+            'tag': {'S': 'critical'},
+            'keywords': {'L': [{'S': 'SEV1'}, {'S': 'OUTAGE'}]},
+        },
+    )
+    monkeypatch.setenv('DYNAMODB_RULES_TABLE', table_name)
+
+    tagger = Tagger()
+    raw = RawLog(id='2b', timestamp=datetime.now(), source='s', message='SEV1 incident')
+    tagged = tagger.tag_log(raw)
+    assert 'critical' in tagged.tags
+
+
+@mock_aws
 def test_s3_uploader_upload_log(monkeypatch):
     # create bucket
     s3 = boto3.client('s3', region_name=get_aws_region())
