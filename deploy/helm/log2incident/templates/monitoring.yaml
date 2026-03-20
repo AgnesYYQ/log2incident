@@ -1,0 +1,85 @@
+{{- if and .Values.monitoring.enabled (eq .Values.env "aws") }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudwatch-agent-config
+  namespace: default
+  labels:
+    app: cloudwatch-agent
+    chart: {{ .Chart.Name }}
+data:
+  config.json: |
+    {
+      "logs": {
+        "logs_collected": {
+          "files": {
+            "collect_list": [
+              {
+                "file_path": "/var/log/app.log",
+                "log_group_name": "{{ .Values.monitoring.aws.logGroup }}"
+              }
+            ]
+          }
+        }
+      },
+      "metrics": {
+        "namespace": "{{ .Values.monitoring.aws.metricsNamespace }}"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudwatch-agent
+spec:
+  selector:
+    matchLabels:
+      app: cloudwatch-agent
+  template:
+    metadata:
+      labels:
+        app: cloudwatch-agent
+    spec:
+      containers:
+        - name: cloudwatch-agent
+          image: amazon/cloudwatch-agent:latest
+          volumeMounts:
+            - name: cwagent-config
+              mountPath: /etc/cwagentconfig
+          env:
+            - name: CW_CONFIG_CONTENT
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudwatch-agent-config
+                  key: config.json
+      volumes:
+        - name: cwagent-config
+          configMap:
+            name: cloudwatch-agent-config
+{{- end }}
+
+{{- if and .Values.monitoring.enabled (eq .Values.env "azure") }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: omsagent
+spec:
+  selector:
+    matchLabels:
+      app: omsagent
+  template:
+    metadata:
+      labels:
+        app: omsagent
+    spec:
+      containers:
+        - name: omsagent
+          image: mcr.microsoft.com/azuremonitor/containerinsights/ciprod:latest
+          env:
+            - name: WSID
+              value: "{{ .Values.monitoring.azure.logAnalyticsWorkspaceId }}"
+            - name: KEY
+              value: "{{ .Values.monitoring.azure.logAnalyticsKey }}"
+{{- end }}

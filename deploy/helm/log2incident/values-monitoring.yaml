@@ -1,0 +1,10 @@
+# Values for monitoring integration
+monitoring:
+  enabled: true
+  provider: aws # or 'azure'
+  aws:
+    logGroup: /log2incident/app
+    metricsNamespace: log2incident
+  azure:
+    logAnalyticsWorkspaceId: <workspace-id>
+    logAnalyticsKey: <workspace-key>
