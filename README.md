@@ -31,7 +31,7 @@ The system consists of two main components:
 1. **Ingestion**: Consume logs from AWS SQS queue
 2. **Tagging**: Apply model-matching to add tags to logs
 3. **Storage**: Store tagged logs in S3 bucket
-4. **ETL Filter**: Use Flink to filter logs and trigger events
+4. **ETL Filter**: Run a minimal Flink ETL demo (with local fallback if PyFlink is unavailable)
 5. **Events**: Create events from filtered logs
 6. **Incidents**: Aggregate events into incidents (accumulated or instant)
 
@@ -66,6 +66,16 @@ The API will be available at `http://localhost:8000`
 ```bash
 python3 scripts/run_pipeline.py
 ```
+
+Optional: run the ETL demo job directly:
+
+```bash
+python3 scripts/run_flink_demo.py
+```
+
+Notes:
+- If `pyflink` is installed, the demo uses PyFlink DataStream filtering.
+- If `pyflink` is not installed, it automatically uses a local fallback mode so the demo still runs.
 
 **Terminal 3 - Start the React Frontend:**
 ```bash

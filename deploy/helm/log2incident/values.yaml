@@ -1,0 +1,17 @@
+registry: ""
+env: dev
+apiGateway:
+  image: api-gateway
+  tag: latest
+logReceiver:
+  image: log-receiver
+  tag: latest
+etlFilter:
+  image: etl-filter
+  tag: latest
+modelMatching:
+  image: model-matching
+  tag: latest
+incidentCreator:
+  image: incident-creator
+  tag: latest

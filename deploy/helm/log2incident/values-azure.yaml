@@ -1,0 +1,4 @@
+# Azure-specific values
+env: azure
+registry: <azure_registry>.azurecr.io/log2incident
+# Add Azure-specific env vars, secrets, endpoints here
