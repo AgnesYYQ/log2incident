@@ -10,6 +10,9 @@ def get_aws_region():
 def get_sqs_queue_url():
     return os.getenv('SQS_QUEUE_URL')
 
+def get_kinesis_stream_name():
+    return os.getenv('KINESIS_STREAM_NAME', 'log2incident-stream')
+
 def get_s3_bucket():
     return os.getenv('S3_BUCKET')
 

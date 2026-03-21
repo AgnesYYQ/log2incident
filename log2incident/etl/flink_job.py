@@ -1,6 +1,25 @@
+from log2incident.etl.kinesis_consumer import fetch_raw_logs_from_kinesis
+def run_etl_from_kinesis(max_records: int = 100, prefer_flink: bool = True):
+    """
+    Fetch logs from Kinesis and run ETL pipeline.
+    Args:
+        max_records: Maximum number of records to fetch from Kinesis.
+        prefer_flink: Whether to use PyFlink if available.
+    Returns:
+        List of Event objects.
+    """
+    raw_logs = fetch_raw_logs_from_kinesis(max_records=max_records)
+    return run_flink_demo(raw_logs, prefer_flink=prefer_flink)
+
 import json
 from datetime import datetime
 from typing import Iterable, List
+import logging
+try:
+    import watchtower
+    _WATCHTOWER_AVAILABLE = True
+except ImportError:
+    _WATCHTOWER_AVAILABLE = False
 
 from log2incident.events.event_creator import EventCreator
 from log2incident.models import Event, RawLog, TaggedLog
@@ -73,6 +92,11 @@ def run_flink_demo(raw_logs: List[RawLog], prefer_flink: bool = True) -> List[Ev
     - Uses PyFlink DataStream when available and requested.
     - Falls back to local filtering for environments without PyFlink.
     """
+    logger = logging.getLogger("etl_filter")
+    logger.setLevel(logging.INFO)
+    if _WATCHTOWER_AVAILABLE and not any(isinstance(h, watchtower.CloudWatchLogHandler) for h in logger.handlers):
+        logger.addHandler(watchtower.CloudWatchLogHandler(log_group="log2incident-etl-filter"))
+
     payloads = [_serialize_raw_log(log) for log in raw_logs]
 
     if get_runtime_mode(prefer_flink) == "pyflink":
@@ -85,6 +109,7 @@ def run_flink_demo(raw_logs: List[RawLog], prefer_flink: bool = True) -> List[Ev
     for payload in filtered_payloads:
         raw_log = _deserialize_raw_log(payload)
         tagged = TaggedLog(**raw_log.model_dump(), tags=["error"])
+        logger.info(f"ETL filtered error log: {tagged.id}")
         events.append(creator.create_event(tagged))
     return events
 
