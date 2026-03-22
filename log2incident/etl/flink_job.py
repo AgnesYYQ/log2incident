@@ -1,4 +1,4 @@
-from log2incident.etl.kinesis_consumer import fetch_raw_logs_from_kinesis
+from log2incident.etl.stream_consumer import fetch_raw_logs_from_kinesis
 def run_etl_from_kinesis(max_records: int = 100, prefer_flink: bool = True):
     """
     Fetch logs from Kinesis and run ETL pipeline.

@@ -1,0 +1,39 @@
+# Azure Monitor Agent DaemonSet for AKS log/metrics shipping
+# Place this in your AKS manifests or Helm values
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ama-metrics-config
+  namespace: monitoring
+  labels:
+    app: azuremonitor-agent
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: azuremonitor-agent
+  namespace: monitoring
+  labels:
+    app: azuremonitor-agent
+spec:
+  selector:
+    matchLabels:
+      app: azuremonitor-agent
+  template:
+    metadata:
+      labels:
+        app: azuremonitor-agent
+    spec:
+      containers:
+        - name: azuremonitor-agent
+          image: mcr.microsoft.com/azuremonitor/containerinsights/ciprod:latest
+          env:
+            - name: WSID
+              value: <log-analytics-workspace-id>
+            - name: KEY
+              value: <log-analytics-key>
