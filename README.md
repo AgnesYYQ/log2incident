@@ -5,11 +5,11 @@ A log processing and product operations platform with a FastAPI backend, React f
 ## Overview
 
 The platform has two tracks:
-
-1. Log pipeline: receives logs, sends them through SQS, tags and stores them, then creates events/incidents.
+1. Log pipeline: receives logs, sends them through Kafka topics (with fan-out for log types), tags and stores them, then creates events/incidents.
 2. Product control flow: uses Postgres as source-of-truth with Redis read/write-through caching for product data.
 
 ## Architecture
+
 
 ### AWS Architecture
 #### Visual Flowchart
@@ -18,13 +18,15 @@ The platform has two tracks:
 flowchart TD
   subgraph AWS
     A1[API Gateway] --> A2[Log Receiver]
-    A2 --> A3[SQS Queue]
-    A3 --> B1[Log Enrichment]
+    A2 --> K1[Kafka Topic]
+    K1 --> B1[Log Enrichment]
     B1 --> B2[S3 Storage]
-    B2 --> B3[ETL Filter]
-    B3 --> C1[Model Matching]
-    C1 --> C2[Events]
-    C2 --> C3[Incidents]
+    B2 --> K2[Kafka Topic (Filtered)]
+    K2 --> B3[ETL Filter]
+    B3 --> K3[Kafka Topic (Matched)]
+    K3 --> C1[Model Matching]
+    C1 --> DDB1[DynamoDB: Events]
+    DDB1 --> DDB2[DynamoDB: Incidents]
     A1 -.-> D1[Products API]
     D1 --> D2[Postgres]
     D1 --> D3[Redis]
@@ -33,25 +35,8 @@ flowchart TD
   classDef aws fill:#f7faff,stroke:#1e90ff,stroke-width:2px;
 ```
 
-```
-  +-------------------+      +-------------------+      +-------------------+
-  |   API Gateway     | ---> |   Log Receiver    | ---> |     SQS Queue     |
-  +-------------------+      +-------------------+      +-------------------+
-                               |
-                               v
-  +-------------------+      +-------------------+      +-------------------+
-  | Log Enrichment    | ---> |   S3 Storage      | ---> |   ETL Filter      |
-  +-------------------+      +-------------------+      +-------------------+
-                               |
-                               v
-  +-------------------+      +-------------------+      +-------------------+
-  |  Model Matching   | ---> |     Events        | ---> |   Incidents       |
-  +-------------------+      +-------------------+      +-------------------+
+![AWS Architecture](aws_architecture.png)
 
-  +-------------------+      +-------------------+      +-------------------+
-  |  Products API     | ---> |    Postgres       |      |      Redis        |
-  +-------------------+      +-------------------+      +-------------------+
-```
 
 ### Azure Architecture
 #### Visual Flowchart
@@ -60,13 +45,15 @@ flowchart TD
 flowchart TD
   subgraph Azure
     Z1[API Gateway] --> Z2[Log Receiver]
-    Z2 --> Z3[Event Hub]
-    Z3 --> Y1[Log Enrichment]
+    Z2 --> K1[Kafka Topic]
+    K1 --> Y1[Log Enrichment]
     Y1 --> Y2[Blob Storage]
-    Y2 --> Y3[ETL Filter]
-    Y3 --> X1[Model Matching]
-    X1 --> X2[Events]
-    X2 --> X3[Incidents]
+    Y2 --> K2[Kafka Topic (Filtered)]
+    K2 --> Y3[ETL Filter]
+    Y3 --> K3[Kafka Topic (Matched)]
+    K3 --> X1[Model Matching]
+    X1 --> CDB1[CosmosDB: Events]
+    CDB1 --> CDB2[CosmosDB: Incidents]
     Z1 -.-> W1[Products API]
     W1 --> W2[Postgres]
     W1 --> W3[Redis]
@@ -75,25 +62,7 @@ flowchart TD
   classDef azure fill:#f7faff,stroke:#007fff,stroke-width:2px;
 ```
 
-```
-  +-------------------+      +-------------------+      +-------------------+
-  |   API Gateway     | ---> |   Log Receiver    | ---> |    Event Hub      |
-  +-------------------+      +-------------------+      +-------------------+
-                               |
-                               v
-  +-------------------+      +-------------------+      +-------------------+
-  | Log Enrichment    | ---> |  Blob Storage     | ---> |   ETL Filter      |
-  +-------------------+      +-------------------+      +-------------------+
-                               |
-                               v
-  +-------------------+      +-------------------+      +-------------------+
-  |  Model Matching   | ---> |     Events        | ---> |   Incidents       |
-  +-------------------+      +-------------------+      +-------------------+
-
-  +-------------------+      +-------------------+      +-------------------+
-  |  Products API     | ---> |    Postgres       |      |      Redis        |
-  +-------------------+      +-------------------+      +-------------------+
-```
+![Azure Architecture](azure_architecture.png)
 
 **Notes:**
 - **Log Receiver**: Enriches logs (adds metadata, normalization, basic tagging).
@@ -104,7 +73,7 @@ The system consists of two main components:
 
 ### 1. API Gateway & Log Receiver
 - **API Gateway**: FastAPI-based HTTP endpoint that receives logs via REST API
-- **Log Receiver**: Accepts logs and queues them to AWS SQS for processing
+- **Log Receiver**: Accepts logs and publishes them to Kafka topics. Logs are catalogued into different types, enabling fan-out to multiple Kafka topics for parallel processing (e.g., by log type, severity, or source). Downstream services can also perform fan-in by consuming from multiple topics as needed.
 - **Auth**: Username validation + login with immediate username errors and accumulated wrong-password attempts
 - **Products**: Product list/get/update APIs backed by Postgres + Redis
 - Provides endpoints:
@@ -117,7 +86,7 @@ The system consists of two main components:
   - `PATCH /products/{product_id}/price` - Update product price (syncs Redis immediately)
 
 ### 2. Processing Pipeline
-1. **Ingestion**: Consume logs from AWS SQS queue
+1. **Ingestion**: Consume logs from Kafka topics (with fan-out/fan-in for different log types and processing needs)
 2. **Tagging**: Apply model-matching to add tags to logs
 3. **Storage**: Store tagged logs in S3 bucket
 4. **ETL Filter**: Run a minimal Flink ETL demo (with local fallback if PyFlink is unavailable)
