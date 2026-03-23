@@ -12,3 +12,8 @@ class S3Uploader:
         key = f"logs/{log.id}.json"
         data = log.model_dump_json()
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=data)
+
+    def download_log(self, key: str) -> dict:
+        response = self.s3.get_object(Bucket=self.bucket, Key=key)
+        content = response['Body'].read().decode('utf-8')
+        return json.loads(content)

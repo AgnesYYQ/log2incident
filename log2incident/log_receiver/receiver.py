@@ -63,7 +63,7 @@ class LogReceiver:
 
     def receive_and_queue_log(self, log_data: dict) -> str:
         """
-        Receive a log entry and queue it to Kinesis (AWS) or Event Hubs (Azure).
+        Receive a log entry, enrich it, store in S3, and publish S3 key to Kafka.
 
         Args:
             log_data: Dictionary containing log information.
@@ -71,14 +71,26 @@ class LogReceiver:
                      Optional: id, timestamp, metadata
 
         Returns:
-            The sequence number (AWS) or message ID (Azure) of the record.
+            The S3 key of the stored log.
         """
+        from log2incident.tagging.tagger import Tagger
+        from log2incident.storage.s3_uploader import S3Uploader
+        from kafka import KafkaProducer
+        tagger = Tagger()
+        s3_uploader = S3Uploader()
+        producer = KafkaProducer(bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                                 value_serializer=lambda v: json.dumps(v).encode('utf-8'))
+        kafka_topic = os.getenv("KAFKA_LOG_TOPIC", "log2incident-logs")
+
+        # Normalization and enrichment
         log_id = log_data.get('id', str(uuid.uuid4()))
         timestamp = log_data.get('timestamp', datetime.now(timezone.utc).isoformat())
         server_receive_time = datetime.now(timezone.utc).isoformat()
-        source = log_data.get('source', 'unknown')
-        message = log_data.get('message', '')
+        source = log_data.get('source', 'unknown').strip().lower()
+        message = log_data.get('message', '').strip()
         metadata = log_data.get('metadata', {})
+        metadata['received_by'] = 'log_receiver'
+        metadata['normalized'] = True
 
         raw_log = RawLog(
             id=log_id,
@@ -88,34 +100,21 @@ class LogReceiver:
             metadata=metadata
         )
 
-        record_data = {
-            'id': raw_log.id,
-            'timestamp': raw_log.timestamp.isoformat(),
-            'server_receive_time': server_receive_time,
-            'source': raw_log.source,
-            'message': raw_log.message,
-            'metadata': raw_log.metadata
-        }
+        # Basic tagging
+        tagged_log = tagger.tag_log(raw_log)
 
-        if self.cloud_provider == "aws":
-            response = self.kinesis.put_record(
-                StreamName=self.stream_name,
-                Data=json.dumps(record_data),
-                PartitionKey=raw_log.id
-            )
-            self.logger.info(
-                f"Queued log to Kinesis",
-                extra={"extra_data": record_data}
-            )
-            return response['SequenceNumber']
-        elif self.cloud_provider == "azure":
-            event_data = EventData(json.dumps(record_data))
-            with self.eventhub_producer:
-                self.eventhub_producer.send_batch([event_data])
-            self.logger.info(
-                f"Queued log to Azure Event Hubs",
-                extra={"extra_data": record_data}
-            )
-            return raw_log.id  # Azure Event Hubs does not return a sequence number
-        else:
-            raise ValueError(f"Unsupported CLOUD_PROVIDER: {self.cloud_provider}")
+        # Store in S3
+        s3_uploader.upload_log(tagged_log)
+        s3_key = f"logs/{tagged_log.id}.json"
+
+        # Publish S3 key to Kafka
+        kafka_message = {
+            's3_key': s3_key,
+            'log_id': tagged_log.id,
+            'timestamp': tagged_log.timestamp.isoformat(),
+            'tags': tagged_log.tags
+        }
+        producer.send(kafka_topic, kafka_message)
+        producer.flush()
+        self.logger.info(f"Enriched log stored in S3 and S3 key published to Kafka", extra={"extra_data": kafka_message})
+        return s3_key

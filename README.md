@@ -11,6 +11,95 @@ The platform has two tracks:
 
 ## Architecture
 
+### AWS Architecture
+#### Visual Flowchart
+
+```mermaid
+flowchart TD
+  subgraph AWS
+    A1[API Gateway] --> A2[Log Receiver]
+    A2 --> A3[SQS Queue]
+    A3 --> B1[Log Enrichment]
+    B1 --> B2[S3 Storage]
+    B2 --> B3[ETL Filter]
+    B3 --> C1[Model Matching]
+    C1 --> C2[Events]
+    C2 --> C3[Incidents]
+    A1 -.-> D1[Products API]
+    D1 --> D2[Postgres]
+    D1 --> D3[Redis]
+  end
+  style AWS fill:#f7faff,stroke:#1e90ff,stroke-width:2px
+  classDef aws fill:#f7faff,stroke:#1e90ff,stroke-width:2px;
+```
+
+```
+  +-------------------+      +-------------------+      +-------------------+
+  |   API Gateway     | ---> |   Log Receiver    | ---> |     SQS Queue     |
+  +-------------------+      +-------------------+      +-------------------+
+                               |
+                               v
+  +-------------------+      +-------------------+      +-------------------+
+  | Log Enrichment    | ---> |   S3 Storage      | ---> |   ETL Filter      |
+  +-------------------+      +-------------------+      +-------------------+
+                               |
+                               v
+  +-------------------+      +-------------------+      +-------------------+
+  |  Model Matching   | ---> |     Events        | ---> |   Incidents       |
+  +-------------------+      +-------------------+      +-------------------+
+
+  +-------------------+      +-------------------+      +-------------------+
+  |  Products API     | ---> |    Postgres       |      |      Redis        |
+  +-------------------+      +-------------------+      +-------------------+
+```
+
+### Azure Architecture
+#### Visual Flowchart
+
+```mermaid
+flowchart TD
+  subgraph Azure
+    Z1[API Gateway] --> Z2[Log Receiver]
+    Z2 --> Z3[Event Hub]
+    Z3 --> Y1[Log Enrichment]
+    Y1 --> Y2[Blob Storage]
+    Y2 --> Y3[ETL Filter]
+    Y3 --> X1[Model Matching]
+    X1 --> X2[Events]
+    X2 --> X3[Incidents]
+    Z1 -.-> W1[Products API]
+    W1 --> W2[Postgres]
+    W1 --> W3[Redis]
+  end
+  style Azure fill:#f7faff,stroke:#007fff,stroke-width:2px
+  classDef azure fill:#f7faff,stroke:#007fff,stroke-width:2px;
+```
+
+```
+  +-------------------+      +-------------------+      +-------------------+
+  |   API Gateway     | ---> |   Log Receiver    | ---> |    Event Hub      |
+  +-------------------+      +-------------------+      +-------------------+
+                               |
+                               v
+  +-------------------+      +-------------------+      +-------------------+
+  | Log Enrichment    | ---> |  Blob Storage     | ---> |   ETL Filter      |
+  +-------------------+      +-------------------+      +-------------------+
+                               |
+                               v
+  +-------------------+      +-------------------+      +-------------------+
+  |  Model Matching   | ---> |     Events        | ---> |   Incidents       |
+  +-------------------+      +-------------------+      +-------------------+
+
+  +-------------------+      +-------------------+      +-------------------+
+  |  Products API     | ---> |    Postgres       |      |      Redis        |
+  +-------------------+      +-------------------+      +-------------------+
+```
+
+**Notes:**
+- **Log Receiver**: Enriches logs (adds metadata, normalization, basic tagging).
+- **ETL Filter**: Service deployed in EKS/AKS, applies filter logic to logs.
+- **Model Matching**: The core logic that uses rules/models to match/enrich logs, create events, and aggregate incidents.
+
 The system consists of two main components:
 
 ### 1. API Gateway & Log Receiver
