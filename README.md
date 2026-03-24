@@ -17,10 +17,9 @@ The platform has two tracks:
 ```mermaid
 flowchart TD
   subgraph AWS
-    A1[API Gateway] --> A2[Log Receiver]
+    A1[API Gateway] --> A2[Log Receiver & Enricher]
     A2 --> K1[Kafka Topic]
-    K1 --> B1[Log Enrichment]
-    B1 --> B2[S3 Storage]
+    K1 --> B2[S3 Storage]
     B2 --> K2[Kafka Topic (Filtered)]
     K2 --> B3[ETL Filter]
     B3 --> K3[Kafka Topic (Matched)]
@@ -44,10 +43,9 @@ flowchart TD
 ```mermaid
 flowchart TD
   subgraph Azure
-    Z1[API Gateway] --> Z2[Log Receiver]
+    Z1[API Gateway] --> Z2[Log Receiver & Enricher]
     Z2 --> K1[Kafka Topic]
-    K1 --> Y1[Log Enrichment]
-    Y1 --> Y2[Blob Storage]
+    K1 --> Y2[Blob Storage]
     Y2 --> K2[Kafka Topic (Filtered)]
     K2 --> Y3[ETL Filter]
     Y3 --> K3[Kafka Topic (Matched)]
@@ -65,7 +63,7 @@ flowchart TD
 ![Azure Architecture](azure_architecture.png)
 
 **Notes:**
-- **Log Receiver**: Enriches logs (adds metadata, normalization, basic tagging).
+- **Log Receiver & Enricher**: Receives and enriches logs (adds metadata, normalization, basic tagging).
 - **ETL Filter**: Service deployed in EKS/AKS, applies filter logic to logs.
 - **Model Matching**: The core logic that uses rules/models to match/enrich logs, create events, and aggregate incidents.
 
@@ -208,3 +206,87 @@ E2E prerequisites:
 ## Deployment
 
 Configured for local deployment. For production, deploy to AWS EMR or Kubernetes as needed.
+
+## Cloud Deployment (EKS/AKS)
+
+
+You can deploy the platform to AWS EKS or Azure AKS using the provided infrastructure-as-code and Kubernetes manifests. Follow these steps in order:
+
+### 1. Provision the Cluster
+
+- **AWS EKS:**
+  - Go to `deploy/infra/aws/` and review `main.tf` (Terraform).
+  - Initialize and apply Terraform to create the EKS cluster and resources:
+    ```bash
+    cd deploy/infra/aws
+    terraform init
+    terraform apply
+    ```
+  - Update your kubeconfig to connect to the new EKS cluster (see AWS docs or Terraform output).
+
+- **Azure AKS:**
+  - Go to `deploy/infra/azure/` and review `main.tf` (Terraform).
+  - Initialize and apply Terraform to create the AKS cluster and resources:
+    ```bash
+    cd deploy/infra/azure
+    terraform init
+    terraform apply
+    ```
+  - Update your kubeconfig to connect to the new AKS cluster (see Azure docs or Terraform output).
+
+### 2. Deploy Kafka to EKS/AKS
+
+Kafka is deployed inside your Kubernetes cluster using the Strimzi operator. After your cluster is ready and `kubectl` is configured:
+
+1. **Install the Strimzi Kafka Operator**
+   - Download and apply the Strimzi installation manifests:
+     ```bash
+     kubectl create namespace kafka
+     kubectl apply -f https://strimzi.io/install/latest?namespace=kafka -n kafka
+     ```
+   - Wait for the Strimzi operator pods to be running:
+     ```bash
+     kubectl get pods -n kafka
+     ```
+
+2. **Deploy the Kafka Cluster**
+   - Apply the provided Kafka cluster manifest:
+     ```bash
+     kubectl apply -f deploy/infra/kafka-cluster.yaml -n kafka
+     ```
+   - Check that the Kafka and Zookeeper pods are running:
+     ```bash
+     kubectl get pods -n kafka
+     ```
+
+3. **(Optional) Expose Kafka Externally**
+   - For development, you may use NodePort or LoadBalancer services. For production, configure Ingress or use an internal service as needed. See Strimzi documentation for details.
+
+4. **Verify Kafka is Ready**
+   - Ensure all Kafka and Zookeeper pods are in the `Running` state before proceeding with other platform components.
+
+**Note:** The provided manifest deploys a basic Kafka cluster. You can customize `deploy/infra/kafka-cluster.yaml` for your scaling, storage, or security needs. See the [Strimzi documentation](https://strimzi.io/docs/) for advanced configuration.
+
+### 3. Deploy Platform Components
+
+Once your cluster and Kafka are ready and `kubectl` is configured:
+
+- Apply the core manifests (monitoring, etc.):
+  ```bash
+  kubectl apply -f deploy/infra/eks-logging-metrics.yaml   # For AWS
+  kubectl apply -f deploy/infra/azure/aks-monitoring.yaml  # For Azure
+  # Add other manifests as needed
+  ```
+
+- (Optional) Use Helm charts in `deploy/helm/log2incident/` for more advanced deployments:
+  ```bash
+  helm install log2incident ./deploy/helm/log2incident -f deploy/helm/log2incident/values.yaml
+  # Or use values-aws.yaml / values-azure.yaml for cloud-specific configs
+  ```
+
+### 4. Access the Platform
+
+- Expose/load balance services as needed (see your cloud provider's docs or add Ingress manifests).
+- Continue with the [Quick Start](#quick-start) to run backend, pipeline, and frontend.
+
+**Note:** You may need to update secrets, storage classes, or cloud-specific settings in the manifests for your environment.

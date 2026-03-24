@@ -1,0 +1,32 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: raw-logs
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  partitions: 6
+  replicas: 3
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: filtered-logs
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  partitions: 6
+  replicas: 3
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: matched-logs
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  partitions: 6
+  replicas: 3

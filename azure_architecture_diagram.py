@@ -1,5 +1,5 @@
 from diagrams import Diagram, Cluster
-from diagrams.azure.compute import FunctionApps
+from diagrams.azure.containers import KubernetesServices
 from diagrams.azure.network import ApplicationGateway
 from diagrams.azure.database import CosmosDb, DatabaseForPostgresqlServers
 from diagrams.azure.storage import BlobStorage
@@ -10,21 +10,20 @@ from diagrams.onprem.inmemory import Redis
 with Diagram("Azure Log2Incident Architecture", show=False, filename="azure_architecture", outformat="png"):
     user = AllResources("Client")
     api = ApplicationGateway("API Gateway")
-    receiver = FunctionApps("Log Receiver")
+    receiver = KubernetesServices("Log Receiver & Enricher (AKS)")
     kafka1 = Kafka("Kafka Topic")
-    enrich = FunctionApps("Log Enrichment")
     blob = BlobStorage("Blob Storage")
     kafka2 = Kafka("Kafka Topic (Filtered)")
-    etl = FunctionApps("ETL Filter")
+    etl = KubernetesServices("ETL Filter (AKS)")
     kafka3 = Kafka("Kafka Topic (Matched)")
-    matcher = FunctionApps("Model Matching")
+    matcher = KubernetesServices("Model Matching (AKS)")
     events = CosmosDb("CosmosDB: Events")
     incidents = CosmosDb("CosmosDB: Incidents")
-    products = FunctionApps("Products API")
+    products = KubernetesServices("Products API (AKS)")
     postgres = DatabaseForPostgresqlServers("Postgres")
     redis = Redis("Redis")
 
-    user >> api >> receiver >> kafka1 >> enrich >> blob >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
+    user >> api >> receiver >> kafka1 >> blob >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
     api >> products
     products >> postgres
     products >> redis
