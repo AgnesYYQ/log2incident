@@ -207,6 +207,84 @@ E2E prerequisites:
 
 Configured for local deployment. For production, deploy to AWS EMR or Kubernetes as needed.
 
+
+## Infrastructure Setup with Terraform
+
+You can provision all required cloud infrastructure using Terraform. Example steps for both AWS and Azure are below:
+
+
+### AWS Setup
+The Terraform configuration provisions the following AWS resources:
+- VPC and subnets
+- IAM roles for EKS and nodes
+- S3 bucket for log storage
+- EKS cluster and node group
+- Kinesis stream
+- **CloudWatch Log Group** for application logs
+- **DynamoDB tables** for events and incidents
+- **Managed Streaming for Kafka (MSK)** cluster
+
+**Setup steps:**
+1. Install [Terraform](https://www.terraform.io/downloads.html) if not already installed.
+2. Configure your AWS credentials (via `aws configure` or environment variables).
+3. Navigate to the AWS Terraform directory:
+   ```bash
+   cd deploy/infra/aws
+   ```
+4. Initialize Terraform (for the 1st run):
+   ```bash
+   terraform init
+   ```
+5. Plan Terraform (for the following runs):
+   ```bash
+   terraform plan
+   ```
+6. Review and customize `main.tf` as needed (see above resources).
+7. Apply the Terraform plan to create resources:
+   ```bash
+   terraform apply
+   ```
+8. After completion, note the outputs (VPC ID, EKS cluster name, S3 bucket, DynamoDB, MSK, etc.).
+9. Update your kubeconfig to connect to the EKS cluster (see AWS docs or Terraform output).
+
+
+### Azure Setup
+The Terraform configuration provisions the following Azure resources:
+- Virtual network and subnet
+- Managed identity
+- AKS cluster
+- Event Hub namespace and topic
+- **Application Insights** for monitoring
+- **CosmosDB account, databases, and containers** for events and incidents
+
+**Setup steps:**
+1. Install [Terraform](https://www.terraform.io/downloads.html) and [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) if not already installed.
+2. Log in to Azure:
+   ```bash
+   az login
+   ```
+3. Navigate to the Azure Terraform directory:
+   ```bash
+   cd deploy/infra/azure
+   ```
+4. Initialize Terraform (for the 1st run):
+   ```bash
+   terraform init
+   ```
+5. Plan Terraform (for the following runs):
+   ```bash
+   terraform plan
+   ```
+6. Review and customize `main.tf` as needed (see above resources).
+7. Apply the Terraform plan to create resources:
+   ```bash
+   terraform apply
+   ```
+8. After completion, note the outputs (VNet ID, AKS cluster name, CosmosDB, Application Insights, Event Hub, etc.).
+9. Update your kubeconfig to connect to the AKS cluster (see Azure docs or Terraform output).
+
+---
+
 ## Cloud Deployment (EKS/AKS)
 
 
