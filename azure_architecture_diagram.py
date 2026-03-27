@@ -4,11 +4,11 @@ from diagrams.azure.network import ApplicationGateway
 from diagrams.azure.database import CosmosDb, DatabaseForPostgresqlServers
 from diagrams.azure.storage import BlobStorage
 from diagrams.azure.general import AllResources
+from diagrams.onprem.client import Users
 from diagrams.onprem.queue import Kafka
 from diagrams.onprem.inmemory import Redis
 
-with Diagram("Azure Log2Incident Architecture", show=False, filename="azure_architecture", outformat="png"):
-    user = AllResources("Client")
+    frontend = Users("Frontend (React)")
     api = ApplicationGateway("API Gateway")
     receiver = KubernetesServices("Log Receiver & Enricher (AKS)")
     kafka1 = Kafka("Kafka Topic")
@@ -21,9 +21,10 @@ with Diagram("Azure Log2Incident Architecture", show=False, filename="azure_arch
     incidents = CosmosDb("CosmosDB: Incidents")
     products = KubernetesServices("Products API (AKS)")
     postgres = DatabaseForPostgresqlServers("Postgres")
-    redis = Redis("Redis")
+    redis = Redis("Redis (Cache)")
 
-    user >> api >> receiver >> kafka1 >> blob >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
-    api >> products
+    frontend >> api
+    api >> receiver >> kafka1 >> blob >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
+    frontend >> products
     products >> postgres
     products >> redis

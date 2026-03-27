@@ -140,19 +140,59 @@ resource "aws_cloudwatch_log_group" "log2incident" {
 resource "aws_dynamodb_table" "events" {
   name           = "log2incident-events"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "event_id"
+  hash_key       = "id"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
   attribute {
     name = "event_id"
     type = "S"
+  }
+
+  global_secondary_index {
+    name               = "TimestampIndex"
+    hash_key           = "timestamp"
+    range_key          = "id"
+    projection_type    = "ALL"
+  }
+  tags = {
+    Name = "log2incident-events"
   }
 }
 resource "aws_dynamodb_table" "incidents" {
   name           = "log2incident-incidents"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "incident_id"
+  hash_key       = "id"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
   attribute {
     name = "incident_id"
     type = "S"
+  }
+
+  global_secondary_index {
+    name               = "TimestampIndex"
+    hash_key           = "timestamp"
+    range_key          = "id"
+    projection_type    = "ALL"
+  }
+  tags = {
+    Name = "log2incident-incidents"
   }
 }
 

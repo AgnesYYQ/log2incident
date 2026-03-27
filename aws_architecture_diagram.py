@@ -5,10 +5,11 @@ from diagrams.aws.network import APIGateway
 from diagrams.aws.storage import S3
 from diagrams.aws.database import Dynamodb
 from diagrams.aws.general import User
+from diagrams.onprem.client import Users
 from diagrams.onprem.queue import Kafka
 
 with Diagram("AWS Log2Incident Architecture", show=False, filename="aws_architecture", outformat="png"):
-    user = User("Client")
+    frontend = Users("Frontend (React)")
     api = APIGateway("API Gateway")
     receiver = EC2("Log Receiver & Enricher")
     kafka1 = Kafka("Kafka Topic")
@@ -21,9 +22,10 @@ with Diagram("AWS Log2Incident Architecture", show=False, filename="aws_architec
     incidents = Dynamodb("DynamoDB: Incidents")
     products = EC2("Products API")
     postgres = EC2("Postgres")
-    redis = EC2("Redis")
+    redis = EC2("Redis (Cache)")
 
-    user >> api >> receiver >> kafka1 >> s3 >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
-    api >> products
+    frontend >> api
+    api >> receiver >> kafka1 >> s3 >> kafka2 >> etl >> kafka3 >> matcher >> events >> incidents
+    frontend >> products
     products >> postgres
     products >> redis
