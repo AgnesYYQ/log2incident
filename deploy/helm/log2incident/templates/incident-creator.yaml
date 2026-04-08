@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incident-creator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: incident-creator
+  template:
+    metadata:
+      labels:
+        app: incident-creator
+    spec:
+      containers:
+        - name: incident-creator
+          image: "{{ .Values.registry }}/incident-creator:{{ .Values.incidentCreator.tag }}"
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+            - name: KAFKA_EVENT_TOPIC
+              value: "log2incident-events"
+            - name: KAFKA_INCIDENT_TOPIC
+              value: "log2incident-incidents"
+            - name: INCIDENT_WINDOW_SECONDS
+              value: "60"
+            - name: INCIDENT_FAILED_LOGIN_THRESHOLD
+              value: "10"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
