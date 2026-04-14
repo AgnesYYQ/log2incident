@@ -14,6 +14,28 @@ metadata:
     k8s-app: fluent-bit
   annotations:
     description: Fluent Bit config for EKS to Elasticsearch
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        1
+        Log_Level    info
+        Parsers_File parsers.conf
+
+    [INPUT]
+        Name   tail
+        Path   /var/log/*.log
+        Tag    app.*
+
+    [OUTPUT]
+        Name  es
+        Match *
+        Host  elasticsearch-logging.monitoring.svc.cluster.local
+        Port  9200
+        Index my_app_logs
+        Type  _doc
+        AWS_Auth On
+        AWS_Region us-east-1
+        tls On
 ---
 apiVersion: apps/v1
 kind: DaemonSet
