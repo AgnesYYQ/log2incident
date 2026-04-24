@@ -31,6 +31,7 @@ class ModelMatcher:
         cloud = os.getenv("CLOUD_PROVIDER", "aws").lower()
         try:
             if cloud == "aws":
+                # Only DynamoDB is used for rules, not for log shipping.
                 import boto3
                 table_name = os.getenv("DYNAMODB_MODEL_RULES_TABLE", "log2incident-model-rules")
                 dynamodb = boto3.resource('dynamodb', region_name=os.getenv("AWS_REGION", "us-east-1"))

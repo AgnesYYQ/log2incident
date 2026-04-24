@@ -1,5 +1,60 @@
-# Fluent Bit DaemonSet for EKS log shipping to Elasticsearch
-# Place this in your EKS manifests or Helm values (example for Kubernetes YAML)
+---
+# CloudWatch Agent ConfigMap for capturing container logs
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudwatch-agent-config
+  namespace: logging
+data:
+  config.json: |
+    {
+      "logs": {
+        "logs_collected": {
+          "files": {
+            "collect_list": [
+              {
+                "file_path": "/var/log/containers/*.log",
+                "log_group_name": "/aws/eks/your-cluster-name/app"
+              }
+            ]
+          }
+        }
+      }
+    }
+
+# CloudWatch Agent DaemonSet
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudwatch-agent
+  namespace: logging
+spec:
+  selector:
+    matchLabels:
+      app: cloudwatch-agent
+  template:
+    metadata:
+      labels:
+        app: cloudwatch-agent
+    spec:
+      containers:
+        - name: cloudwatch-agent
+          image: amazon/cloudwatch-agent:latest
+          volumeMounts:
+            - name: cwagent-config
+              mountPath: /etc/cwagentconfig
+          env:
+            - name: CW_CONFIG_CONTENT
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudwatch-agent-config
+                  key: config.json
+      volumes:
+        - name: cwagent-config
+          configMap:
+            name: cloudwatch-agent-config
+
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -21,10 +76,11 @@ data:
         Log_Level    info
         Parsers_File parsers.conf
 
+
     [INPUT]
-        Name   tail
-        Path   /var/log/*.log
-        Tag    app.*
+      Name   tail
+      Path   /var/log/containers/*.log
+      Tag    kube.*
 
     [OUTPUT]
         Name  es

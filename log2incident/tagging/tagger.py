@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-import boto3
+
 from botocore.exceptions import BotoCoreError, ClientError
 
 from config.config import get_aws_region, get_dynamodb_rules_table
@@ -23,6 +23,8 @@ class Tagger:
         if not table_name:
             return DEFAULT_RULES
 
+
+        import boto3
         dynamodb = boto3.resource('dynamodb', region_name=get_aws_region())
         table = dynamodb.Table(table_name)
 

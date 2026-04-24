@@ -1,11 +1,14 @@
-import boto3
+
 from log2incident.models import RawLog
 from config.config import get_aws_region, get_sqs_queue_url
 import json
 from datetime import datetime
 
+
 class SQSConsumer:
     def __init__(self):
+        # SQS client is used for queueing, not for log shipping. No direct log push to CloudWatch here.
+        import boto3
         self.sqs = boto3.client('sqs', region_name=get_aws_region())
         self.queue_url = get_sqs_queue_url()
 

@@ -28,22 +28,8 @@ class LogReceiver:
         self.cloud_provider = os.getenv("CLOUD_PROVIDER", "aws").lower()
         self.logger = logging.getLogger("log_receiver")
         self.logger.setLevel(logging.INFO)
-        if _WATCHTOWER_AVAILABLE:
-            handler = watchtower.CloudWatchLogHandler(log_group="log2incident-log-receiver")
-            class JsonFormatter(logging.Formatter):
-                def format(self, record):
-                    log_record = {
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "level": record.levelname,
-                        "logger": record.name,
-                        "message": record.getMessage(),
-                    }
-                    if hasattr(record, 'extra_data'):
-                        log_record.update(record.extra_data)
-                    return json.dumps(log_record)
-            handler.setFormatter(JsonFormatter())
-            self.logger.addHandler(handler)
-
+        # Removed Watchtower/CloudWatch log handler. Logs will be written to stdout/stderr only.
+        # Removed direct log push to Elasticsearch. Use DaemonSets for log shipping.
         if self.cloud_provider == "aws":
             import boto3
             self.kinesis = boto3.client('kinesis', region_name=get_aws_region())
@@ -116,5 +102,5 @@ class LogReceiver:
         }
         producer.send(kafka_topic, kafka_message)
         producer.flush()
-        self.logger.info(f"Enriched log stored in S3 and S3 key published to Kafka", extra={"extra_data": kafka_message})
+        self.logger.info(f"Enriched log stored in S3 and S3 key published to Kafka: {kafka_message}")
         return s3_key
