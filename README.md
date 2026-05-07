@@ -17,15 +17,15 @@ The platform has two tracks:
 ```mermaid
 flowchart TD
   subgraph AWS
-    A1[API Gateway] --> A2[Log Receiver & Enricher]
+    A1[API Gateway] --> A2[Log Receiver and Enricher]
     A2 --> K1[Kafka Topic]
     K1 --> B2[S3 Storage]
-    B2 --> K2[Kafka Topic (Filtered)]
+    B2 --> K2["Kafka Topic (Filtered)"]
     K2 --> B3[ETL Filter]
-    B3 --> K3[Kafka Topic (Matched)]
+    B3 --> K3["Kafka Topic (Matched)"]
     K3 --> C1[Model Matching]
-    C1 --> DDB1[DynamoDB: Events]
-    DDB1 --> DDB2[DynamoDB: Incidents]
+    C1 --> DDB1[DynamoDB Events]
+    DDB1 --> DDB2[DynamoDB Incidents]
     A1 -.-> D1[Products API]
     D1 --> D2[Postgres]
     D1 --> D3[Redis]
@@ -43,15 +43,15 @@ flowchart TD
 ```mermaid
 flowchart TD
   subgraph Azure
-    Z1[API Gateway] --> Z2[Log Receiver & Enricher]
+    Z1[API Gateway] --> Z2[Log Receiver and Enricher]
     Z2 --> K1[Kafka Topic]
     K1 --> Y2[Blob Storage]
-    Y2 --> K2[Kafka Topic (Filtered)]
+    Y2 --> K2["Kafka Topic (Filtered)"]
     K2 --> Y3[ETL Filter]
-    Y3 --> K3[Kafka Topic (Matched)]
+    Y3 --> K3["Kafka Topic (Matched)"]
     K3 --> X1[Model Matching]
-    X1 --> CDB1[CosmosDB: Events]
-    CDB1 --> CDB2[CosmosDB: Incidents]
+    X1 --> CDB1[CosmosDB Events]
+    CDB1 --> CDB2[CosmosDB Incidents]
     Z1 -.-> W1[Products API]
     W1 --> W2[Postgres]
     W1 --> W3[Redis]
