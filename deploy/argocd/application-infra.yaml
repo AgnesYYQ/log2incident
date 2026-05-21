@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: log2incident-infra
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/your-org/log2incident.git'
+    targetRevision: HEAD
+    path: deploy/infra
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: log2incident-infra
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
