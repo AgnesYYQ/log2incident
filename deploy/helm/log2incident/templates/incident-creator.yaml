@@ -2,8 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: incident-creator
+  labels:
+    app: incident-creator
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.incidentCreator.replicas | default 1 }}
   selector:
     matchLabels:
       app: incident-creator
@@ -14,22 +17,19 @@ spec:
     spec:
       containers:
         - name: incident-creator
-          image: "{{ .Values.registry }}/incident-creator:{{ .Values.incidentCreator.tag }}"
+          image: "{{ .Values.registry }}/{{ .Values.incidentCreator.image }}:{{ .Values.incidentCreator.tag }}"
           env:
             - name: KAFKA_BOOTSTRAP_SERVERS
-              value: "kafka:9092"
+              value: "{{ .Values.kafka.bootstrapServers }}"
             - name: KAFKA_EVENT_TOPIC
-              value: "log2incident-events"
+              value: "{{ .Values.kafka.topics.events }}"
             - name: KAFKA_INCIDENT_TOPIC
-              value: "log2incident-incidents"
+              value: "{{ .Values.kafka.topics.incidents }}"
+            - name: KAFKA_INCIDENT_CREATOR_GROUP
+              value: "incident-creator-group"
             - name: INCIDENT_WINDOW_SECONDS
               value: "60"
             - name: INCIDENT_FAILED_LOGIN_THRESHOLD
               value: "10"
           resources:
-            limits:
-              cpu: 500m
-              memory: 512Mi
-            requests:
-              cpu: 100m
-              memory: 128Mi
+            {{- toYaml .Values.incidentCreator.resources | nindent 12 }}

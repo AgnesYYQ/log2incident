@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-matching
+  labels:
+    app: model-matching
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.modelMatching.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: model-matching
+  template:
+    metadata:
+      labels:
+        app: model-matching
+    spec:
+      containers:
+        - name: model-matching
+          image: "{{ .Values.registry }}/{{ .Values.modelMatching.image }}:{{ .Values.modelMatching.tag }}"
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "{{ .Values.kafka.bootstrapServers }}"
+            - name: KAFKA_FILTERED_TOPIC
+              value: "log2incident-filtered"
+            - name: KAFKA_MM_GROUP
+              value: "model-matching-group"
+            - name: KAFKA_EVENT_TOPIC
+              value: "log2incident-events"
+          resources:
+            {{- toYaml .Values.modelMatching.resources | nindent 12 }}

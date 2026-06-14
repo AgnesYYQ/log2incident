@@ -5,7 +5,7 @@ A log processing and product operations platform with a FastAPI backend, React f
 ## Overview
 
 The platform has two tracks:
-1. Log pipeline: receives logs, sends them through Kafka topics (with fan-out for log types), tags and stores them, then creates events/incidents.
+1. Log pipeline: receives logs, enriches and tags them, stores in S3/Blob, then processes through a chain of Kafka topics (`log2incident-logs` → `log2incident-filtered` → `log2incident-events` → `log2incident-incidents`) to create events and incidents.
 2. Product control flow: uses Postgres as source-of-truth with Redis read/write-through caching for product data.
 
 ## Architecture
@@ -18,14 +18,16 @@ The platform has two tracks:
 flowchart TD
   subgraph AWS
     A1[API Gateway] --> A2[Log Receiver and Enricher]
-    A2 --> K1[Kafka Topic]
+    A2 --> K1[log2incident-logs]
     K1 --> B2[S3 Storage]
-    B2 --> K2["Kafka Topic (Filtered)"]
+    B2 --> K2[log2incident-filtered]
     K2 --> B3[ETL Filter]
-    B3 --> K3["Kafka Topic (Matched)"]
+    B3 --> K3[log2incident-events]
     K3 --> C1[Model Matching]
     C1 --> DDB1[DynamoDB Events]
-    DDB1 --> DDB2[DynamoDB Incidents]
+    C1 -.-> K4[log2incident-incidents]
+    K4 --> IC[Incident Creator]
+    IC --> DDB2[DynamoDB Incidents]
     A1 -.-> D1[Products API]
     D1 --> D2[Postgres]
     D1 --> D3[Redis]
@@ -44,14 +46,16 @@ flowchart TD
 flowchart TD
   subgraph Azure
     Z1[API Gateway] --> Z2[Log Receiver and Enricher]
-    Z2 --> K1[Kafka Topic]
+    Z2 --> K1[log2incident-logs]
     K1 --> Y2[Blob Storage]
-    Y2 --> K2["Kafka Topic (Filtered)"]
+    Y2 --> K2[log2incident-filtered]
     K2 --> Y3[ETL Filter]
-    Y3 --> K3["Kafka Topic (Matched)"]
+    Y3 --> K3[log2incident-events]
     K3 --> X1[Model Matching]
     X1 --> CDB1[CosmosDB Events]
-    CDB1 --> CDB2[CosmosDB Incidents]
+    X1 -.-> K4[log2incident-incidents]
+    K4 --> IC[Incident Creator]
+    IC --> CDB2[CosmosDB Incidents]
     Z1 -.-> W1[Products API]
     W1 --> W2[Postgres]
     W1 --> W3[Redis]
@@ -62,16 +66,26 @@ flowchart TD
 
 ![Azure Architecture](azure_architecture.png)
 
+**Kafka Topics & Consumer Groups:**
+
+| Deployment | Consumer Topic | Consumer Group | Producer Topic |
+|---|---|---|---|
+| `log-receiver` | — | — | `log2incident-logs` |
+| `etl-filter` | `log2incident-logs` | `etl-filter-group` | `log2incident-filtered` |
+| `model-matching` | `log2incident-filtered` | `model-matching-group` | `log2incident-events` |
+| `incident-creator` | `log2incident-events` | `incident-creator-group` | `log2incident-incidents` |
+
 **Notes:**
 - **Log Receiver & Enricher**: Receives and enriches logs (adds metadata, normalization, basic tagging).
 - **ETL Filter**: Service deployed in EKS/AKS, applies filter logic to logs.
-- **Model Matching**: The core logic that uses rules/models to match/enrich logs, create events, and aggregate incidents.
+- **Model Matching**: The core logic that uses rules/models to match/enrich logs, create events, and publishes them to the events topic.
+- **Incident Creator**: Consumes events, applies threshold-based detection (e.g., brute force), and creates incidents.
 
 The system consists of two main components:
 
 ### 1. API Gateway & Log Receiver
 - **API Gateway**: FastAPI-based HTTP endpoint that receives logs via REST API
-- **Log Receiver**: Accepts logs and publishes them to Kafka topics. Logs are catalogued into different types, enabling fan-out to multiple Kafka topics for parallel processing (e.g., by log type, severity, or source). Downstream services can also perform fan-in by consuming from multiple topics as needed.
+- **Log Receiver**: Accepts logs, enriches/normalizes them, stores in S3/Blob, and publishes the S3 key to the `log2incident-logs` Kafka topic for downstream processing.
 - **Auth**: Username validation + login with immediate username errors and accumulated wrong-password attempts
 - **Products**: Product list/get/update APIs backed by Postgres + Redis
 - Provides endpoints:
@@ -84,12 +98,10 @@ The system consists of two main components:
   - `PATCH /products/{product_id}/price` - Update product price (syncs Redis immediately)
 
 ### 2. Processing Pipeline
-1. **Ingestion**: Consume logs from Kafka topics (with fan-out/fan-in for different log types and processing needs)
-2. **Tagging**: Apply model-matching to add tags to logs
-3. **Storage**: Store tagged logs in S3 bucket
-4. **ETL Filter**: Run a minimal Flink ETL demo (with local fallback if PyFlink is unavailable)
-5. **Events**: Create events from filtered logs
-6. **Incidents**: Aggregate events into incidents (accumulated or instant)
+1. **Log Receiver** — Receives logs via REST API, enriches/tags them, stores raw logs in S3/Blob, and publishes S3 key to `log2incident-logs`
+2. **ETL Filter** — Consumes from `log2incident-logs` (group `etl-filter-group`), downloads logs from S3, applies filter rules, and publishes passed logs to `log2incident-filtered`
+3. **Model Matching** — Consumes from `log2incident-filtered` (group `model-matching-group`), matches logs against models/rules, creates events, persists to DynamoDB/CosmosDB, and publishes events to `log2incident-events`
+4. **Incident Creator** — Consumes from `log2incident-events` (group `incident-creator-group`), applies threshold-based detection (e.g. brute force), creates incidents, persists to DynamoDB/CosmosDB, and publishes incidents to `log2incident-incidents`
 
 ## Installation
 
@@ -343,6 +355,24 @@ Kafka is deployed inside your Kubernetes cluster using the Strimzi operator. Aft
 4. **Verify Kafka is Ready**
    - Ensure all Kafka and Zookeeper pods are in the `Running` state before proceeding with other platform components.
 
+5. **Create Kafka Topics**
+   - Apply the topic manifests (topic names are already aligned with application code):
+     ```bash
+     kubectl apply -f deploy/infra/kafka-topics.yaml -n kafka
+     ```
+   - This creates 4 topics:
+     - `log2incident-logs` — raw logs from Log Receiver → ETL Filter
+     - `log2incident-filtered` — filtered logs from ETL Filter → Model Matching
+     - `log2incident-events` — events from Model Matching → Incident Creator
+     - `log2incident-incidents` — incidents from Incident Creator → Notification Service
+
+6. **(Optional) Create Kafka Users with ACLs**
+   - Apply the user manifests to bind each microservice to its consumer group and topic ACLs:
+     ```bash
+     kubectl apply -f deploy/infra/kafka-users.yaml -n kafka
+     ```
+   - This creates 4 users (`log-receiver`, `etl-filter`, `model-matching`, `incident-creator`) each with least-privilege ACLs matching the table above.
+
 **Note:** The provided manifest deploys a basic Kafka cluster. You can customize `deploy/infra/kafka-cluster.yaml` for your scaling, storage, or security needs. See the [Strimzi documentation](https://strimzi.io/docs/) for advanced configuration.
 
 ### 3. Deploy Platform Components
@@ -356,11 +386,22 @@ Once your cluster and Kafka are ready and `kubectl` is configured:
   # Add other manifests as needed
   ```
 
-- (Optional) Use Helm charts in `deploy/helm/log2incident/` for more advanced deployments:
+- **(Recommended) Use Helm charts** in `deploy/helm/log2incident/` to deploy all microservices:
   ```bash
-  helm install log2incident ./deploy/helm/log2incident -f deploy/helm/log2incident/values.yaml
-  # Or use values-aws.yaml / values-azure.yaml for cloud-specific configs
+  helm install log2incident ./deploy/helm/log2incident \
+    -f deploy/helm/log2incident/values.yaml \
+    -f deploy/helm/log2incident/values-aws.yaml    # or values-azure.yaml
   ```
+  The Helm chart deploys the following components, each with its Kafka topic and consumer group pre-configured:
+
+  | Helm Template | Deployment | Service |
+  |---|---|---|
+  | `templates/api-gateway.yaml` | `api-gateway` | REST API gateway |
+  | `templates/log-receiver.yaml` | `log-receiver` | Log ingestion & enrichment |
+  | `templates/etl-filter.yaml` | `etl-filter` | ETL filtering |
+  | `templates/model-matching.yaml` | `model-matching` | Event creation |
+  | `templates/incident-creator.yaml` | `incident-creator` | Incident aggregation |
+  | `templates/monitoring.yaml` | `cloudwatch-agent` / `omsagent` | Cloud monitoring (DaemonSet) |
 
 ### 4. Access the Platform
 

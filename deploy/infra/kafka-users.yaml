@@ -1,0 +1,132 @@
+# KafkaUsers (Consumer Groups) for log2incident pipeline
+# Each microservice that consumes from Kafka gets a dedicated user & consumer group.
+#
+# Deployment          → Consumer Group           → Topics (read)
+# ─────────────────────────────────────────────────────────────
+# log-receiver        → (producer only, no consumer group needed)
+# etl-filter          → etl-filter-group          → log2incident-logs
+# model-matching      → model-matching-group      → log2incident-filtered
+# incident-creator    → incident-creator-group    → log2incident-events
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: etl-filter
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      # Read from log2incident-logs
+      - resource:
+          type: topic
+          name: log2incident-logs
+          patternType: literal
+        operation: Read
+        host: "*"
+      - resource:
+          type: group
+          name: etl-filter-group
+          patternType: literal
+        operation: Read
+        host: "*"
+      # Write to log2incident-filtered
+      - resource:
+          type: topic
+          name: log2incident-filtered
+          patternType: literal
+        operation: Write
+        host: "*"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: model-matching
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      # Read from log2incident-filtered
+      - resource:
+          type: topic
+          name: log2incident-filtered
+          patternType: literal
+        operation: Read
+        host: "*"
+      - resource:
+          type: group
+          name: model-matching-group
+          patternType: literal
+        operation: Read
+        host: "*"
+      # Write to log2incident-events
+      - resource:
+          type: topic
+          name: log2incident-events
+          patternType: literal
+        operation: Write
+        host: "*"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: incident-creator
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      # Read from log2incident-events
+      - resource:
+          type: topic
+          name: log2incident-events
+          patternType: literal
+        operation: Read
+        host: "*"
+      - resource:
+          type: group
+          name: incident-creator-group
+          patternType: literal
+        operation: Read
+        host: "*"
+      # Write to log2incident-incidents
+      - resource:
+          type: topic
+          name: log2incident-incidents
+          patternType: literal
+        operation: Write
+        host: "*"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: log-receiver
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      # Write to log2incident-logs
+      - resource:
+          type: topic
+          name: log2incident-logs
+          patternType: literal
+        operation: Write
+        host: "*"

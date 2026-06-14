@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etl-filter
+  labels:
+    app: etl-filter
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.etlFilter.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: etl-filter
+  template:
+    metadata:
+      labels:
+        app: etl-filter
+    spec:
+      containers:
+        - name: etl-filter
+          image: "{{ .Values.registry }}/{{ .Values.etlFilter.image }}:{{ .Values.etlFilter.tag }}"
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "{{ .Values.kafka.bootstrapServers }}"
+            - name: KAFKA_LOG_TOPIC
+              value: "log2incident-logs"
+            - name: KAFKA_FILTERED_TOPIC
+              value: "log2incident-filtered"
+            - name: KAFKA_ETL_GROUP
+              value: "etl-filter-group"
+          resources:
+            {{- toYaml .Values.etlFilter.resources | nindent 12 }}

@@ -1,17 +1,100 @@
+# Global settings
 registry: ""
 env: dev
+
+# Kafka connection
+kafka:
+  bootstrapServers: "kafka:9092"
+  topics:
+    logs: "log2incident-logs"
+    filtered: "log2incident-filtered"
+    events: "log2incident-events"
+    incidents: "log2incident-incidents"
+
+# ── Microservices ──────────────────────────────────────────
+
 apiGateway:
   image: api-gateway
   tag: latest
+  port: 8000
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 logReceiver:
   image: log-receiver
   tag: latest
+  port: 8080
+  replicas: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 etlFilter:
   image: etl-filter
   tag: latest
+  replicas: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 modelMatching:
   image: model-matching
   tag: latest
+  replicas: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 incidentCreator:
   image: incident-creator
   tag: latest
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# ── Cloud-specific overrides ──────────────────────────────
+
+aws:
+  region: us-east-1
+  s3Bucket: "log2incident-logs"
+  logGroup: "/log2incident/app"
+  metricsNamespace: "log2incident"
+
+azure:
+  eventhubName: "log2incident-eventhub"
+  logAnalyticsWorkspaceId: ""
+  logAnalyticsKey: ""
+
+# ── Monitoring ─────────────────────────────────────────────
+
+monitoring:
+  enabled: false
+  aws:
+    logGroup: "/log2incident/app"
+    metricsNamespace: "log2incident"
+  azure:
+    logAnalyticsWorkspaceId: ""
+    logAnalyticsKey: ""

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-receiver
+  labels:
+    app: log-receiver
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: {{ .Values.logReceiver.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: log-receiver
+  template:
+    metadata:
+      labels:
+        app: log-receiver
+    spec:
+      containers:
+        - name: log-receiver
+          image: "{{ .Values.registry }}/{{ .Values.logReceiver.image }}:{{ .Values.logReceiver.tag }}"
+          ports:
+            - containerPort: {{ .Values.logReceiver.port | default 8080 }}
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "{{ .Values.kafka.bootstrapServers }}"
+            - name: KAFKA_LOG_TOPIC
+              value: "log2incident-logs"
+            - name: CLOUD_PROVIDER
+              value: "{{ .Values.env }}"
+            {{- if eq .Values.env "aws" }}
+            - name: AWS_REGION
+              value: "{{ .Values.aws.region }}"
+            - name: S3_BUCKET
+              value: "{{ .Values.aws.s3Bucket }}"
+            {{- else if eq .Values.env "azure" }}
+            - name: AZURE_EVENT_HUB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-eventhub
+                  key: connection_string
+            - name: AZURE_EVENT_HUB_NAME
+              value: "{{ .Values.azure.eventhubName }}"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.logReceiver.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: log-receiver
+  labels:
+    app: log-receiver
+spec:
+  selector:
+    app: log-receiver
+  ports:
+    - protocol: TCP
+      port: {{ .Values.logReceiver.port | default 8080 }}
+      targetPort: {{ .Values.logReceiver.port | default 8080 }}

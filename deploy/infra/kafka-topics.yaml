@@ -1,7 +1,13 @@
+# Topics used by the log2incident pipeline:
+#   log2incident-logs      — Log Receiver → ETL Filter
+#   log2incident-filtered  — ETL Filter → Model Matching
+#   log2incident-events    — Model Matching → Incident Creator
+#   log2incident-incidents — Incident Creator → Notification Service
+---
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: raw-logs
+  name: log2incident-logs
   labels:
     strimzi.io/cluster: my-kafka-cluster
   namespace: kafka
@@ -12,7 +18,7 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: filtered-logs
+  name: log2incident-filtered
   labels:
     strimzi.io/cluster: my-kafka-cluster
   namespace: kafka
@@ -23,7 +29,18 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: matched-logs
+  name: log2incident-events
+  labels:
+    strimzi.io/cluster: my-kafka-cluster
+  namespace: kafka
+spec:
+  partitions: 6
+  replicas: 3
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: log2incident-incidents
   labels:
     strimzi.io/cluster: my-kafka-cluster
   namespace: kafka
