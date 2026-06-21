@@ -47,7 +47,7 @@ class LogReceiver:
         else:
             raise ValueError(f"Unsupported CLOUD_PROVIDER: {self.cloud_provider}")
 
-    def receive_and_queue_log(self, log_data: dict) -> str:
+    def receive_and_queue_log(self, log_data: dict, trace_id: str | None = None) -> str:
         """
         Receive a log entry, enrich it, store in S3, and publish S3 key to Kafka.
 
@@ -55,6 +55,7 @@ class LogReceiver:
             log_data: Dictionary containing log information.
                      Must include: source, message
                      Optional: id, timestamp, metadata
+            trace_id: Distributed tracing ID for correlating this log across services.
 
         Returns:
             The S3 key of the stored log.
@@ -71,36 +72,40 @@ class LogReceiver:
         # Normalization and enrichment
         log_id = log_data.get('id', str(uuid.uuid4()))
         timestamp = log_data.get('timestamp', datetime.now(timezone.utc).isoformat())
-        server_receive_time = datetime.now(timezone.utc).isoformat()
         source = log_data.get('source', 'unknown').strip().lower()
         message = log_data.get('message', '').strip()
         metadata = log_data.get('metadata', {})
         metadata['received_by'] = 'log_receiver'
         metadata['normalized'] = True
+        if trace_id:
+            metadata['trace_id'] = trace_id
 
         raw_log = RawLog(
             id=log_id,
             timestamp=timestamp if isinstance(timestamp, datetime) else datetime.fromisoformat(timestamp),
             source=source,
             message=message,
+            trace_id=trace_id,
             metadata=metadata
         )
 
         # Basic tagging
         tagged_log = tagger.tag_log(raw_log)
 
-        # Store in S3
+        # Store in S3 (trace_id is embedded in the JSON via the model)
         s3_uploader.upload_log(tagged_log)
         s3_key = f"logs/{tagged_log.id}.json"
 
-        # Publish S3 key to Kafka
+        # Publish S3 key to Kafka with trace_id in both headers and body
         kafka_message = {
             's3_key': s3_key,
             'log_id': tagged_log.id,
             'timestamp': tagged_log.timestamp.isoformat(),
-            'tags': tagged_log.tags
+            'tags': tagged_log.tags,
+            'trace_id': trace_id or '',
         }
-        producer.send(kafka_topic, kafka_message)
+        kafka_headers = [('trace_id', (trace_id or '').encode('utf-8'))]
+        producer.send(kafka_topic, kafka_message, headers=kafka_headers)
         producer.flush()
-        self.logger.info(f"Enriched log stored in S3 and S3 key published to Kafka: {kafka_message}")
+        self.logger.info("trace_id=%s log_id=%s Enriched log stored in S3 and published to Kafka", trace_id, tagged_log.id)
         return s3_key

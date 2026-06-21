@@ -2,6 +2,7 @@
 from log2incident.models import RawLog
 from config.config import get_aws_region, get_sqs_queue_url
 import json
+import uuid
 from datetime import datetime
 
 
@@ -23,6 +24,7 @@ class SQSConsumer:
                 timestamp=datetime.fromisoformat(body['timestamp']),
                 source=body['source'],
                 message=body['message'],
+                trace_id=body.get('trace_id') or str(uuid.uuid4()),
                 metadata=body.get('metadata', {})
             )
             logs.append(log)

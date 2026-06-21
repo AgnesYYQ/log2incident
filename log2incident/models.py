@@ -7,6 +7,7 @@ class RawLog(BaseModel):
     timestamp: datetime
     source: str
     message: str
+    trace_id: Optional[str] = None
     metadata: Optional[Dict] = {}
 
 class TaggedLog(RawLog):
@@ -19,6 +20,7 @@ class Event(BaseModel):
     type: str
     severity: str
     description: str
+    trace_id: Optional[str] = None
 
 class Incident(BaseModel):
     id: str
@@ -26,3 +28,4 @@ class Incident(BaseModel):
     events: List[str]  # event ids
     status: str  # open, closed, etc.
     summary: str
+    trace_id: Optional[str] = None

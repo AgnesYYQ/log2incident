@@ -36,16 +36,23 @@ class ModelMatchingService:
         for msg in self.consumer:
             s3_key = msg.value['s3_key']
             log_id = msg.value['log_id']
+            # Extract trace_id from Kafka record headers
+            headers = dict(msg.headers or [])
+            trace_id = headers.get('trace_id', b'').decode('utf-8') or msg.value.get('trace_id', '')
+
             log_data = self.s3_uploader.download_log(s3_key)
             log = TaggedLog(**log_data)
             events = self.model_matcher.match([log])
             for event in events:
-                self.logger.info(f"Created event {event.id} from log {log_id}")
+                self.logger.info("trace_id=%s event_id=%s Created event from log %s", trace_id, event.id, log_id)
                 # Persist to DynamoDB / CosmosDB
                 self.store.save_event(event)
-                # Publish to Kafka events topic for Incident Creator
-                self.producer.send(self.output_topic, event.model_dump(mode='json'))
-                self.logger.info(f"Published event {event.id} to topic {self.output_topic}")
+                # Publish to Kafka events topic for Incident Creator with trace_id
+                event_data = event.model_dump(mode='json')
+                event_data['trace_id'] = trace_id
+                kafka_headers = [('trace_id', trace_id.encode('utf-8'))]
+                self.producer.send(self.output_topic, event_data, headers=kafka_headers)
+                self.logger.info("trace_id=%s event_id=%s Published event to topic %s", trace_id, event.id, self.output_topic)
             # Incident aggregation (example: one incident per event)
             from log2incident.incidents.incident_manager import IncidentManager
             incident_manager = IncidentManager()

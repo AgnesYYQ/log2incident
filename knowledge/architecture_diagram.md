@@ -24,6 +24,17 @@ graph TD
     C -.->|Cut-3: ETL Filter| C
 ```
 
+### Trace ID Propagation
+
+Every HTTP request flowing through the system receives a `trace_id` (UUID) for end-to-end correlation:
+
+- **Generated** at the API Gateway (from `X-Trace-Id` header or auto-generated)
+- **Propagated** via Kafka record headers across all topics (`log2incident-logs` → `log2incident-filtered` → `log2incident-events` → `log2incident-incidents`)
+- **Persisted** in S3/Blob (in the log JSON), DynamoDB/CosmosDB (events + incidents)
+- **Logged** in every service's structured stdout logs → Elasticsearch → Kibana
+
+To trace a request: find its `trace_id` → filter Kibana by `trace_id=<uuid>` → see every pipeline stage that processed it.
+
 - **Frontend (Product Console)**: For product/pricing management, connects to API-Server.
 - **Incident View (UI)**: For incident management, reads from Incidents Table.
 - **Incident Creator** is a dedicated pod, consuming Events and producing Incidents.

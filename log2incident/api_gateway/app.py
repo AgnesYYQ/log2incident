@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -9,10 +9,13 @@ from log2incident.products.store import ProductStore
 from config.config import get_frontend_origin
 from psycopg import Error as PsycopgError
 import logging
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+TRACE_ID_HEADER = "X-Trace-Id"
 
 # Initialize log receiver
 log_receiver = LogReceiver()
@@ -46,6 +49,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    """Ensure every request has a trace_id, propagate it via response header."""
+    trace_id = request.headers.get(TRACE_ID_HEADER) or str(uuid.uuid4())
+    request.state.trace_id = trace_id
+    logger.info("trace_id=%s method=%s path=%s", trace_id, request.method, request.url.path)
+    response = await call_next(request)
+    response.headers[TRACE_ID_HEADER] = trace_id
+    return response
 
 
 class LogRequest(BaseModel):
@@ -170,7 +184,7 @@ async def update_product_price(product_id: str, request: ProductPriceUpdateReque
 
 
 @app.post("/logs", response_model=LogResponse)
-async def receive_log(log: LogRequest):
+async def receive_log(log: LogRequest, request: Request):
     """
     Receive a log entry and queue it for processing.
     
@@ -181,6 +195,7 @@ async def receive_log(log: LogRequest):
     - **metadata**: (Optional) Additional metadata as key-value pairs
     """
     try:
+        trace_id = request.state.trace_id
         log_data = {
             "source": log.source,
             "message": log.message,
@@ -192,10 +207,10 @@ async def receive_log(log: LogRequest):
         # Remove None values
         log_data = {k: v for k, v in log_data.items() if v is not None}
         
-        # Send log to queue
-        message_id = log_receiver.receive_and_queue_log(log_data)
+        # Send log to queue with trace_id
+        message_id = log_receiver.receive_and_queue_log(log_data, trace_id=trace_id)
         
-        logger.info(f"Log received and queued: {log_data.get('id', 'generated_id')}")
+        logger.info("trace_id=%s log_id=%s Log received and queued", trace_id, log_data.get('id', 'generated_id'))
         
         return LogResponse(
             success=True,

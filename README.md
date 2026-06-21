@@ -154,6 +154,43 @@ npm run dev
 
 Frontend URL: `http://localhost:5173`
 
+### Distributed Tracing (Trace IDs)
+
+Every incoming HTTP request gets a `trace_id` (UUID) for end-to-end correlation across the async pipeline:
+
+1. **API Gateway** generates a `trace_id` if no `X-Trace-Id` request header is provided, or reuses an existing one.
+2. The `trace_id` is returned in the **response header** `X-Trace-Id` so callers can capture it.
+3. It propagates through the entire pipeline:
+   - Stored in **S3/Blob** alongside the raw log JSON
+   - Passed via **Kafka record headers** (`trace_id`) on all topics
+   - Persisted in **DynamoDB/CosmosDB** for both Events and Incidents
+   - Logged in all **structured log lines** (`trace_id=...`) → shipped to Elasticsearch → searchable in Kibana
+
+**Correlation workflow:** Given an incident, find its `trace_id` in the database → filter Kibana logs by `trace_id=...` to see every service that touched that request, from HTTP ingress to incident creation.
+
+**Sending a trace_id from the client:**
+```bash
+curl -X POST "http://localhost:8000/logs" \
+  -H "X-Trace-Id: my-custom-trace-123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "my-app",
+    "message": "Database connection failed",
+    "metadata": {
+      "severity": "error",
+      "component": "auth-service"
+    }
+  }'
+```
+
+Without `X-Trace-Id`, the server auto-generates one — check the response headers:
+```bash
+curl -s -D - -X POST "http://localhost:8000/logs" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"test","message":"hello"}' \
+  | grep -i x-trace-id
+```
+
 ### Example: Send a Log
 
 ```bash

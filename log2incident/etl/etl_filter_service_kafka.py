@@ -41,11 +41,22 @@ class ETLFilterService:
         for msg in self.consumer:
             s3_key = msg.value['s3_key']
             log_id = msg.value['log_id']
+            # Extract trace_id from Kafka record headers
+            headers = dict(msg.headers or [])
+            trace_id = headers.get('trace_id', b'').decode('utf-8') or msg.value.get('trace_id', '')
+
             log_data = self.s3_uploader.download_log(s3_key)
             log = TaggedLog(**log_data)
             if self.filter_log(log):
-                self.producer.send(self.output_topic, {'s3_key': s3_key, 'log_id': log_id, 'tags': log.tags})
-                self.logger.info(f"Log {log_id} passed filter and published to {self.output_topic}")
+                kafka_message = {
+                    's3_key': s3_key,
+                    'log_id': log_id,
+                    'tags': log.tags,
+                    'trace_id': trace_id,
+                }
+                kafka_headers = [('trace_id', trace_id.encode('utf-8'))]
+                self.producer.send(self.output_topic, kafka_message, headers=kafka_headers)
+                self.logger.info("trace_id=%s log_id=%s Passed filter and published to %s", trace_id, log_id, self.output_topic)
             else:
-                self.logger.info(f"Log {log_id} did not pass filter")
+                self.logger.info("trace_id=%s log_id=%s Did not pass filter", trace_id, log_id)
         self.producer.flush()

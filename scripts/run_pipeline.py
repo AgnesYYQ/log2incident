@@ -25,8 +25,9 @@ def main():
         event = event_creator.create_event(tagged_log)
         # Process incident
         incident_manager.process_event(event)
+        print(f"trace_id={log.trace_id} log_id={log.id} event_id={event.id} Processed log")
 
-    print(f"Processed {len(raw_logs)} logs")
+    print(f"trace_id=— Processed {len(raw_logs)} logs")
 
 if __name__ == "__main__":
     main()

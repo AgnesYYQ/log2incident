@@ -10,5 +10,6 @@ class EventCreator:
             log_id=log.id,
             type='log_event',
             severity='high' if 'error' in log.tags else 'medium',
-            description=f"Event from log: {log.message}"
+            description=f"Event from log: {log.message}",
+            trace_id=log.trace_id,
         )

@@ -29,7 +29,19 @@
   - Kafka: Consumer lag metrics for backlog/wait time.
   - Custom metrics and logs are used for deeper observability.
 
+## Distributed Tracing with Trace IDs (2026-06-21)
+- **No external APM agent is used.** Trace correlation is done via a lightweight `trace_id` field propagated through all services.
+- Every incoming HTTP request to the API Gateway gets a `trace_id` (UUID) — either reused from the `X-Trace-Id` request header or auto-generated.
+- The `trace_id` flows through the entire async pipeline:
+  - Stored in the **S3 log JSON** (as a field on `RawLog`/`TaggedLog`).
+  - Passed in **Kafka record headers** (`trace_id` key) + message body for all topics.
+  - Persisted in **DynamoDB/CosmosDB** for Events and Incidents.
+  - Included in all **structured log lines** (stdout) → shipped by DaemonSet to Elasticsearch → searchable in Kibana.
+- **Correlation workflow:** Given an incident, find its `trace_id` in Kibana → filter all pipeline logs by `trace_id` → see the full end-to-end flow from HTTP request to incident creation.
+- No changes needed to the Elasticsearch/Fluentd DaemonSet — stdout logs with `trace_id` are automatically collected.
+
 ## Summary
 - The architecture evolved from Lambda/SQS to EKS/Kafka for better scalability and throughput.
 - Autoscaling and observability are key to handling variable log volumes and ensuring reliability.
+- Trace IDs enable end-to-end correlation across the async pipeline without external APM dependencies.
 - Knowledge base files provide details on each architecture component and operational best practices.
